@@ -820,7 +820,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
         client = aws_stack.connect_to_service("lambda", endpoint_url=full_url)
         event = inv_context.event or "{}"
 
-        LOG.debug(f"Calling {full_url} run invocation in docker-reuse Lambda container")
+        LOG.debug(f"Calling {full_url} to run invocation in docker-reuse Lambda container")
         response = client.invoke(
             FunctionName=lambda_function.name(),
             InvocationType=inv_context.invocation_type,
@@ -952,21 +952,26 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
         if os.environ.get("HOSTNAME"):
             env_vars["HOSTNAME"] = os.environ.get("HOSTNAME")
         env_vars["EDGE_PORT"] = config.EDGE_PORT
-        command = [lambda_function.handler]
+        command = None
+        entrypoint = "/bin/bash"
+        interactive = True
 
-        if not in_docker():
+        if in_docker():
             env_vars["DOCKER_LAMBDA_STAY_OPEN"] = "1"
-            command = "/bin/bash"
+            entrypoint = None
+            command = [lambda_function.handler]
+            interactive = False
 
         LOG.debug(
             "Creating docker-reuse Lambda container %s from image %s", container_name, docker_image
         )
         return DOCKER_CLIENT.create_container(
             image_name=docker_image,
-            remove=False,
-            interactive=False,
+            remove=True,
+            interactive=interactive,
             detach=True,
             name=container_name,
+            entrypoint=entrypoint,
             command=command,
             network=network,
             env_vars=env_vars,
@@ -1472,19 +1477,6 @@ class Util:
             )
         docker_tag = runtime
         docker_image = config.LAMBDA_CONTAINER_REGISTRY
-        # TODO: remove prefix once execution issues are fixed with dotnetcore/python lambdas
-        #  See https://github.com/lambci/docker-lambda/pull/218
-        # TODO: remove
-        lambdas_to_add_prefix = [
-            # "dotnetcore2.0",
-            # "dotnetcore2.1",
-            # "python3.6",
-            # "python3.7",
-        ]
-        if docker_image == "lambci/lambda" and any(
-            img in docker_tag for img in lambdas_to_add_prefix
-        ):
-            docker_tag = "20191117-%s" % docker_tag
         if runtime == "nodejs14.x":
             # TODO temporary fix until lambci image for nodejs14.x becomes available
             docker_image = "localstack/lambda-js"

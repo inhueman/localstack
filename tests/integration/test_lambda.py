@@ -421,7 +421,7 @@ class TestLambdaBaseFeatures(unittest.TestCase):
             self.assertIn("ErrorCode", msg_attrs)
             self.assertIn("ErrorMessage", msg_attrs)
 
-        retry(receive_dlq, retries=15, sleep=2)
+        retry(receive_dlq, retries=10, sleep=2)
 
         # update DLQ config
         lambda_client.update_function_configuration(FunctionName=lambda_name, DeadLetterConfig={})
