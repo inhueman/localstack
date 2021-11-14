@@ -794,7 +794,10 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
                 container_info.name, f"{lambda_cwd}/.", DOCKER_TASK_FOLDER
             )
 
-        if not in_docker():
+        lambda_docker_ip = DOCKER_CLIENT.get_container_ip(container_info.name)
+
+        if not lambda_docker_ip or not in_docker():
+            LOG.debug("Using 'docker exec' to run invocation in docker-reuse Lambda container")
             return DOCKER_CLIENT.exec_in_container(
                 container_name_or_id=container_info.name,
                 command=inv_context.lambda_command,
@@ -802,8 +805,6 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
                 env_vars=env_vars,
                 stdin=stdin,
             )
-
-        lambda_docker_ip = DOCKER_CLIENT.get_container_ip(container_info.name)
 
         inv_result = self.invoke_lambda(lambda_function, inv_context, lambda_docker_ip)
         return (inv_result.result, inv_result.log_output)
@@ -819,6 +820,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
         client = aws_stack.connect_to_service("lambda", endpoint_url=full_url)
         event = inv_context.event or "{}"
 
+        LOG.debug(f"Calling {full_url} run invocation in docker-reuse Lambda container")
         response = client.invoke(
             FunctionName=lambda_function.name(),
             InvocationType=inv_context.invocation_type,
@@ -950,7 +952,11 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
         if os.environ.get("HOSTNAME"):
             env_vars["HOSTNAME"] = os.environ.get("HOSTNAME")
         env_vars["EDGE_PORT"] = config.EDGE_PORT
-        env_vars["DOCKER_LAMBDA_STAY_OPEN"] = "1"
+        command = [lambda_function.handler]
+
+        if not in_docker():
+            env_vars["DOCKER_LAMBDA_STAY_OPEN"] = "1"
+            command = "/bin/bash"
 
         LOG.debug(
             "Creating docker-reuse Lambda container %s from image %s", container_name, docker_image
@@ -961,7 +967,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             interactive=False,
             detach=True,
             name=container_name,
-            command=[lambda_function.handler],  # needs the handler to spin up
+            command=command,
             network=network,
             env_vars=env_vars,
             dns=dns,

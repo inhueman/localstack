@@ -53,6 +53,7 @@ def _send_to_dead_letter_queue(source_type: str, source_arn: str, dlq_arn: str, 
     if not dlq_arn:
         return
     LOG.info("Sending failed execution %s to dead letter queue %s" % (source_arn, dlq_arn))
+    print("Sending failed execution %s to dead letter queue %s" % (source_arn, dlq_arn))
     messages = _prepare_messages_to_dlq(source_arn, event, error)
     if ":sqs:" in dlq_arn:
         queue_url = aws_stack.get_sqs_queue_url(dlq_arn)
@@ -60,6 +61,7 @@ def _send_to_dead_letter_queue(source_type: str, source_arn: str, dlq_arn: str, 
         error = None
         result_code = None
         try:
+            print("!!DDLQ", messages)
             result = sqs_client.send_message_batch(QueueUrl=queue_url, Entries=messages)
             result_code = result.get("ResponseMetadata", {}).get("HTTPStatusCode")
         except Exception as e:
