@@ -338,7 +338,7 @@ class SQSTest(unittest.TestCase):
         queue_url = self.client.create_queue(QueueName=queue_name)["QueueUrl"]
 
         payload = {}
-        # String Attributes must not contain non-printable characters
+        # String Attributes must not not contain non-printable characters
         # See: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html
         attrs = {
             "attr1": {

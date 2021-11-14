@@ -434,6 +434,7 @@ class TestLambdaBaseFeatures(unittest.TestCase):
         self.assertEqual("Unhandled", result["FunctionError"])
         self.assertEqual("$LATEST", result["ExecutedVersion"])
         # TODO: fix assertion below
+        print(payload["errorMessage"])
         # self.assertIn("Test exception", payload["errorMessage"])
         self.assertIn("Exception", payload["errorType"])
         self.assertEqual(list, type(payload["stackTrace"]))
