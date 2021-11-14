@@ -14,8 +14,6 @@ import uuid
 from multiprocessing import Process, Queue
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import boto3
-
 from localstack import config
 from localstack.services.awslambda.lambda_utils import (
     API_PATH_ROOT,
@@ -41,11 +39,13 @@ from localstack.utils.common import (
     CaptureOutput,
     get_all_subclasses,
     get_free_tcp_port,
+    in_docker,
     json_safe,
     last_index_of,
     long_uid,
     md5,
     now,
+    retry,
     run,
     run_safe,
     safe_requests,
@@ -55,7 +55,12 @@ from localstack.utils.common import (
     to_bytes,
     to_str,
 )
-from localstack.utils.docker_utils import DOCKER_CLIENT, ContainerException, PortMappings
+from localstack.utils.docker_utils import (
+    DOCKER_CLIENT,
+    ContainerException,
+    DockerContainerStatus,
+    PortMappings,
+)
 from localstack.utils.run import FuncThread
 
 # constants
@@ -789,6 +794,15 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
                 container_info.name, f"{lambda_cwd}/.", DOCKER_TASK_FOLDER
             )
 
+        if not in_docker():
+            return DOCKER_CLIENT.exec_in_container(
+                container_name_or_id=container_info.name,
+                command=inv_context.lambda_command,
+                interactive=True,
+                env_vars=env_vars,
+                stdin=stdin,
+            )
+
         lambda_docker_ip = DOCKER_CLIENT.get_container_ip(container_info.name)
 
         inv_result = self.invoke_lambda(lambda_function, inv_context, lambda_docker_ip)
@@ -802,12 +816,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
     ) -> InvocationResult:
         full_url = f"http://{lambda_docker_ip}:9001"
 
-        client = boto3.client(
-            service_name="lambda",
-            region_name=config.DEFAULT_REGION,
-            endpoint_url=full_url,
-        )
-
+        client = aws_stack.connect_to_service("lambda", endpoint_url=full_url)
         event = inv_context.event or "{}"
 
         response = client.invoke(
@@ -817,7 +826,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             LogType="Tail",
         )
 
-        log_output = base64.b64decode(response["LogResult"]).decode("utf-8")
+        log_output = base64.b64decode(response.get("LogResult") or b"").decode("utf-8")
         result = response["Payload"].read().decode("utf-8")
 
         if "FunctionError" in response:
@@ -893,8 +902,13 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
 
                 LOG.debug("Starting docker-reuse Lambda container: %s", container_name)
                 DOCKER_CLIENT.start_container(container_name)
+
+                def wait_up():
+                    cont_status = DOCKER_CLIENT.get_container_status(container_name)
+                    assert cont_status == DockerContainerStatus.UP
+
                 # give the container some time to start up
-                time.sleep(1)
+                retry(wait_up, retries=15, sleep=0.8)
 
             container_network = self.get_docker_container_network(func_arn)
             entry_point = DOCKER_CLIENT.get_image_entrypoint(docker_image)
@@ -1454,11 +1468,12 @@ class Util:
         docker_image = config.LAMBDA_CONTAINER_REGISTRY
         # TODO: remove prefix once execution issues are fixed with dotnetcore/python lambdas
         #  See https://github.com/lambci/docker-lambda/pull/218
+        # TODO: remove
         lambdas_to_add_prefix = [
-            "dotnetcore2.0",
-            "dotnetcore2.1",
-            "python3.6",
-            "python3.7",
+            # "dotnetcore2.0",
+            # "dotnetcore2.1",
+            # "python3.6",
+            # "python3.7",
         ]
         if docker_image == "lambci/lambda" and any(
             img in docker_tag for img in lambdas_to_add_prefix
