@@ -421,7 +421,7 @@ class TestLambdaBaseFeatures(unittest.TestCase):
             self.assertIn("ErrorCode", msg_attrs)
             self.assertIn("ErrorMessage", msg_attrs)
 
-        retry(receive_dlq, retries=12, sleep=2)
+        retry(receive_dlq, retries=15, sleep=2)
 
         # update DLQ config
         lambda_client.update_function_configuration(FunctionName=lambda_name, DeadLetterConfig={})
@@ -433,9 +433,7 @@ class TestLambdaBaseFeatures(unittest.TestCase):
         self.assertEqual(200, result["StatusCode"])
         self.assertEqual("Unhandled", result["FunctionError"])
         self.assertEqual("$LATEST", result["ExecutedVersion"])
-        # TODO: fix assertion below
-        print(payload["errorMessage"])
-        # self.assertIn("Test exception", payload["errorMessage"])
+        self.assertIn("Test exception", payload["errorMessage"])
         self.assertIn("Exception", payload["errorType"])
         self.assertEqual(list, type(payload["stackTrace"]))
         log_result = result.get("LogResult")
