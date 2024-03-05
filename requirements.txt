@@ -84,3 +84,4 @@ pyproject-flake8
 isort==5.9.1
 pandoc
 pypandoc
+hypercorn>=0.16.0 # not directly required, pinned by Snyk to avoid a vulnerability
