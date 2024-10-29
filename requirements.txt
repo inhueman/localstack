@@ -55,11 +55,11 @@ pproxy>=2.7.0
 psutil>=5.4.8,<6.0.0
 #pympler>=0.6
 pyopenssl==17.5.0
-Quart>=0.6.15
+Quart>=0.19.7
 readerwriterlock>=1.0.7
 requests-aws4auth==0.9
 #sasl>=0.2.1
-Werkzeug>=2.0
+Werkzeug>=3.0.6
 xmltodict>=0.11.0
 
 # extra=test
